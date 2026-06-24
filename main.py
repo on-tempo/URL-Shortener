@@ -12,23 +12,29 @@ from datetime import datetime, timezone, timedelta
 # Create all tables on startup
 models.Base.metadata.create_all(bind=engine)
 
+
 class URLRequest(BaseModel):
     url: HttpUrl
     expires_in_days: int | None = None
 
+
 app = FastAPI()
+
 
 @app.get("/")
 def read_root():
     return {"message": "URL Shortener API is running!"}
 
+
 def generate_short_code():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=7))
+
 
 @app.get("/generate")
 def generate_endpoint():
     short_code = generate_short_code()
     return {"short_code": short_code}
+
 
 @app.post("/shorten")
 def shorten_url(request: URLRequest, db: Session = Depends(get_db)):
@@ -42,21 +48,37 @@ def shorten_url(request: URLRequest, db: Session = Depends(get_db)):
     db.refresh(new_url)
     return {"short_code": short_code, "long_url": str(request.url)}
 
+
 @app.get("/{short_code}")
 def redirect_url(short_code: str, db: Session = Depends(get_db)):
-    cached_url = redis_client.get(short_code)
+    # Try cache first; if Redis is down, treat as a cache miss
+    try:
+        cached_url = redis_client.get(short_code)
+    except Exception:
+        cached_url = None
+
     if cached_url:
-        redis_client.incr(f"clicks:{short_code}")
+        try:
+            redis_client.incr(f"clicks:{short_code}")
+        except Exception:
+            pass
         return RedirectResponse(cached_url)
-    
+
+    # Cache miss (or Redis down): fall back to the DB
     url_entry = db.query(models.URL).filter(models.URL.short_code == short_code).first()
     if url_entry:
         if url_entry.expires_at and url_entry.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
             return {"error": "This link has expired"}
-        redis_client.set(short_code, url_entry.long_url, ex=3600)
-        redis_client.incr(f"clicks:{short_code}")
+        # Caching and click-counting are best-effort; don't fail the redirect if Redis is down
+        try:
+            redis_client.set(short_code, url_entry.long_url, ex=3600)
+            redis_client.incr(f"clicks:{short_code}")
+        except Exception:
+            pass
         return RedirectResponse(url_entry.long_url)
+
     return {"error": "Short code not found"}
+
 
 @app.delete("/{short_code}")
 def delete_url(short_code: str, db: Session = Depends(get_db)):
@@ -64,13 +86,21 @@ def delete_url(short_code: str, db: Session = Depends(get_db)):
     if url_entry:
         db.delete(url_entry)
         db.commit()
-        redis_client.delete(short_code)
+        # Cache invalidation is best-effort; the DB delete already succeeded
+        try:
+            redis_client.delete(short_code)
+        except Exception:
+            pass
         return {"message": "Short code deleted successfully"}
     return {"error": "Short code not found"}
 
+
 @app.get("/{short_code}/clicks")
 def get_clicks(short_code: str, db: Session = Depends(get_db)):
-    clicks = redis_client.get(f"clicks:{short_code}")
+    try:
+        clicks = redis_client.get(f"clicks:{short_code}")
+    except Exception:
+        clicks = None
     if clicks is None:
         clicks = 0
     return {"short_code": short_code, "clicks": int(clicks)}
