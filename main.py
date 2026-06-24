@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 import random
 import string
-from pydantic import BaseModel
+from pydantic import BaseModel, HttpUrl
 from fastapi.responses import RedirectResponse
 from database import engine, get_db
 import models
@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 models.Base.metadata.create_all(bind=engine)
 
 class URLRequest(BaseModel):
-    url: str
+    url: HttpUrl
     expires_in_days: int | None = None
 
 app = FastAPI()
@@ -36,11 +36,11 @@ def shorten_url(request: URLRequest, db: Session = Depends(get_db)):
     expires_at = None
     if request.expires_in_days:
         expires_at = datetime.now(timezone.utc) + timedelta(days=request.expires_in_days)
-    new_url = models.URL(short_code = short_code, long_url = request.url, expires_at = expires_at)
+    new_url = models.URL(short_code=short_code, long_url=str(request.url), expires_at=expires_at)
     db.add(new_url)
     db.commit()
     db.refresh(new_url)
-    return {"short_code": short_code, "long_url": request.url}
+    return {"short_code": short_code, "long_url": str(request.url)}
 
 @app.get("/{short_code}")
 def redirect_url(short_code: str, db: Session = Depends(get_db)):
