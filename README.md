@@ -2,7 +2,7 @@
 
 A URL shortener built with FastAPI, SQLite, and Redis.
 
-This is my second backend project. I built it to understand caching and how a read-heavy service works, not just to make it run. Most of the design choices below came from asking "why" for each part, so I tried to write down the reasoning instead of only the steps.
+I built it to understand caching and how a read-heavy service works, not just to make it run. Most of the design choices below came from asking "why" for each part, so I tried to write down the reasoning instead of only the steps.
 
 ## What it does
 
