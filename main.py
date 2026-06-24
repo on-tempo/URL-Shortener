@@ -48,3 +48,13 @@ def redirect_url(short_code: str, db: Session = Depends(get_db)):
         redis_client.set(short_code, url_entry.long_url, ex=3600)
         return RedirectResponse(url_entry.long_url)
     return {"error": "Short code not found"}
+
+@app.delete("/{short_code}")
+def delete_url(short_code: str, db: Session = Depends(get_db)):
+    url_entry = db.query(models.URL).filter(models.URL.short_code == short_code).first()
+    if url_entry:
+        db.delete(url_entry)
+        db.commit()
+        redis_client.delete(short_code)
+        return {"message": "Short code deleted successfully"}
+    return {"error": "Short code not found"}
