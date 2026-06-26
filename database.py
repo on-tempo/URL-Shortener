@@ -1,11 +1,13 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# SQLite database file location (creates urls.db in the project folder)
-DATABASE_URL = "sqlite:///./urls.db"
+# Read the database URL from the environment (set by docker-compose).
+# Fall back to a local default so it still runs outside Docker if needed.
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/urlshortener")
 
-# Create the DB engine (SQLite needs this connect_args option)
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Create the DB engine (no SQLite-specific connect_args anymore)
+engine = create_engine(DATABASE_URL)
 
 # Session factory: each request borrows one DB session
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
