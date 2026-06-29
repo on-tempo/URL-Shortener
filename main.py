@@ -8,10 +8,20 @@ from database import engine, get_db
 import models
 from redis_client import redis_client
 from datetime import datetime, timezone, timedelta
+import time
+from sqlalchemy.exc import OperationalError
 
-# Create all tables on startup
-models.Base.metadata.create_all(bind=engine)
-
+# Create all tables on startup.
+# Retry because in Docker the DB may not be reachable the instant this container starts.
+for attempt in range(10):
+    try:
+        models.Base.metadata.create_all(bind=engine)
+        break
+    except OperationalError:
+        print(f"DB not ready, retrying... ({attempt + 1}/10)")
+        time.sleep(2)
+else:
+    raise RuntimeError("Could not connect to the database after 10 attempts")
 
 class URLRequest(BaseModel):
     url: HttpUrl
